@@ -46,9 +46,6 @@ def insta_scrape(url, save_dir):
             img_element = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@class='_aagv']/img")))            
             img_url = img_element.get_attribute('src')
             if img_url:
-                if (img_url == "None"):
-                    print("Image URL not found!")
-                    return
                 img_url = check_if_multiple_images(img_url)
                 response = requests.get(img_url, stream=True)
                 if response.status_code == 200:
