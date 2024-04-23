@@ -1,26 +1,27 @@
 #!/usr/bin/env python3
 
+from datetime import datetime
 import sys
-import argparse
 import os
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.firefox.service import Service
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.firefox.options import Options
+from selenium import webdriver
+import requests
 from dotenv import load_dotenv
 load_dotenv()
-from datetime import datetime
-import requests
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
-def update_url(img_url):
+
+def update_url(img_url: str) -> str:
     parts = img_url.split('?')
     if len(parts) < 1:
         # return early since it is just a single image
         return img_url
     base_url = parts[0]
-    query_string = parts[1] 
+    query_string = parts[1]
     params = query_string.split('&')
     new_params = []
 
@@ -35,7 +36,24 @@ def update_url(img_url):
     new_url = base_url + '?' + new_query_string if new_query_string else base_url
     return new_url
 
-def insta_scrape():
+
+def count_images(driver, wait, img_count: int) -> int:
+    try:
+        while True:
+            next_button = wait.until(EC.element_to_be_clickable(
+                (By.XPATH, "//button[@aria-label='Next']")))
+            if next_button:
+                next_button.click()
+                img_count += 1
+                print(img_count)
+                WebDriverWait(driver, 5).until(EC.staleness_of(next_button))
+    except TimeoutException as e:
+        print("Error occurred when locating next button:", e)
+
+    return img_count
+
+
+def insta_scrape() -> None:
     if len(sys.argv) > 1:
         url = sys.argv[1]
     else:
@@ -51,31 +69,38 @@ def insta_scrape():
     options.add_argument('--headless')
     service = Service('/usr/bin/geckodriver', log_path='/dev/null')
     url = update_url(url)
+    img_count = 1
     with webdriver.Firefox(options=options, service=service) as driver:
         try:
             driver.get(url)
             wait = WebDriverWait(driver, 15)
-            img_element = wait.until(EC.presence_of_element_located(
-                (By.XPATH, "//div[@class='_aagv']/img")))
-            img_url = img_element.get_attribute('src')
-            if (img_url == "None"):
-                print("Image URL not found!")
-                return
-            response = requests.get(img_url, stream=True, timeout=30)
-            if response.status_code == 200:
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                image_name = os.path.join(
-                    save_dir, f"instagram_{timestamp}")
-                with open(image_name, 'wb') as f:
-                    for chunk in response.iter_content(1024):
-                        f.write(chunk)
-                    print(f"Image saved as {image_name}")
-            else:
-                print(f"Failed to download image. Status code: {response.status_code}")
-        except Exception as e:
-            print("Exception occurred: ", e)
+            # img_count = count_images(driver, wait, img_count)
+            for _ in range(img_count):
+                img_element = wait.until(EC.presence_of_element_located(
+                    (By.XPATH, "//div[@class='_aagv']/img")))
+                img_url = img_element.get_attribute('src')
+                if (img_url == "None"):
+                    print("Image URL not found!")
+                    return
+                response = requests.get(img_url, stream=True, timeout=30)
+                if response.status_code == 200:
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    image_name = os.path.join(
+                        save_dir, f"instagram_{timestamp}")
+                    with open(image_name, 'wb') as f:
+                        for chunk in response.iter_content(1024):
+                            f.write(chunk)
+                        print(f"Image saved as {image_name}")
+                else:
+                    print(
+                        f"Failed to download image. Status code: {response.status_code}")
+                url = update_url(url)
+                driver.get(url)
+        except NoSuchElementException as e:
+            print("Exception occurred:", e)
         finally:
             driver.quit()
+
 
 if __name__ == "__main__":
     insta_scrape()
