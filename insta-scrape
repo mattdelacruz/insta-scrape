@@ -9,7 +9,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.firefox.options import Options
-from selenium import webdriver
+#from selenium import webdriver
+from selenium.webdriver.firefox.webdriver import WebDriver
 import requests
 from dotenv import load_dotenv
 load_dotenv()
@@ -17,7 +18,7 @@ load_dotenv()
 
 def update_url(img_url: str) -> str:
     parts = img_url.split('?')
-    if len(parts) < 1:
+    if len(parts) <= 1:
         # return early since it is just a single image
         return img_url
     base_url = parts[0]
@@ -27,17 +28,14 @@ def update_url(img_url: str) -> str:
 
     for param in params:
         key_value = param.split('=')
-        if key_value[0] == 'img_index':
-            new_params.append(f"{key_value[0]}={int(key_value[1]) + 1}")
-        else:
-            new_params.append(param)
+        new_params.append(f"{key_value[0]}={int(key_value[1]) + 1}")
 
     new_query_string = '&'.join(new_params)
     new_url = base_url + '?' + new_query_string if new_query_string else base_url
     return new_url
 
 
-def count_images(driver, wait, img_count: int) -> int:
+def count_images(driver: WebDriver, wait: WebDriverWait, img_count: int) -> int:
     try:
         while True:
             next_button = wait.until(EC.element_to_be_clickable(
@@ -60,6 +58,15 @@ def insta_scrape() -> None:
         print("Error: Must provide a url")
         sys.exit(1)
 
+    if "instagram.com/p/" not in url:
+        print("Error: Must provide a valid Instagram url")
+        sys.exit(1)
+    
+    post_id_parts = url.split("/p/")
+    if post_id_parts[1] == '':
+        print("Error: Must provide a valid Instagram post url")
+        sys.exit(1)
+
     if len(sys.argv) > 2:
         save_dir = sys.argv[2]
     else:
@@ -68,9 +75,11 @@ def insta_scrape() -> None:
     options = Options()
     options.add_argument('--headless')
     service = Service('/usr/bin/geckodriver', log_path='/dev/null')
-    url = update_url(url)
+    if "?img_index=" in url: 
+        url = update_url(url)
     img_count = 1
-    with webdriver.Firefox(options=options, service=service) as driver:
+    driver = WebDriver(options=options, service=service)
+    with driver:
         try:
             driver.get(url)
             wait = WebDriverWait(driver, 15)
